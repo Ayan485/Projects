@@ -2,110 +2,162 @@
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
-#include <MPU6050.h>
+#include <Adafruit_MPU6050.h>
+#include <Adafruit_Sensor.h>
 
+// --------- FIXED I2C PINS ----------
+#define SDA_PIN 4
+#define SCL_PIN 9
+
+// --------- OLED ----------
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 
-MPU6050 mpu;
+// --------- MPU6050 ----------
+Adafruit_MPU6050 mpu;
 
-long accelX, accelY, accelZ;
-long gyroX, gyroY, gyroZ;
+// --------- GLOBAL FOUND ADDRESS ----------
+byte oledAddress = 0;
 
-// --------------------------
-// Draw rotation axis (Z rotation)
-// --------------------------
-void drawZRotationIndicator(int zGyro) {
-    display.drawLine(64, 0, 64, 30, WHITE);  // vertical axis
 
-    // map Z gyro (-250 → +250 °/s) to arrow rotation
-    int angle = map(zGyro, -250, 250, -45, 45);
-    float rad = angle * 0.01745;
-
-    int x = 64 + 20 * sin(rad);
-    int y = 30 - 20 * cos(rad);
-
-    display.drawLine(64, 30, x, y, WHITE);
-    display.fillCircle(x, y, 3, WHITE);
-}
-
-// --------------------------
-// Motor command logging
-// --------------------------
-void logMovement(String msg) {
-    display.clearDisplay();
-    display.setTextSize(2);
-    display.setCursor(0, 20);
-    display.print(msg);
-    display.display();
-    delay(400);  // brief display time
-}
-
-// --------------------------
-// Setup
-// --------------------------
-void setup() {
-    Wire.begin();
-
-    display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
-    display.clearDisplay();
-    display.setTextColor(WHITE);
-    display.setTextSize(2);
-
-    // Boot messages
-    const char* bootMsgs[] = {"Welcome", "Vacuum Robot", "Starting On", "Ready..."};
-    for (int i = 0; i < 4; i++) {
-        display.clearDisplay();
-        display.setCursor(10, 25);
-        display.print(bootMsgs[i]);
-        display.display();
-        delay(1000);
+// --------- SIMPLE I2C SCANNER ----------
+byte scanI2C() {
+  Serial.println("Scanning I2C bus...");
+  
+  for (byte addr = 1; addr < 127; addr++) {
+    Wire.beginTransmission(addr);
+    if (Wire.endTransmission() == 0) {
+      Serial.print("FOUND DEVICE @ 0x");
+      Serial.println(addr, HEX);
+      return addr; // return first device found
     }
-
-    // Init MPU6050
-    mpu.initialize();
+  }
+  Serial.println("No I2C device found!");
+  return 0;
 }
 
-// --------------------------
-// Loop
-// --------------------------
+
+// ---- Helper: show splash text for 1 second ----
+void showSplash(const char* text) {
+  display.clearDisplay();
+  display.setTextSize(2);
+  display.setTextColor(SSD1306_WHITE);
+
+  int16_t x1, y1;
+  uint16_t w, h;
+  display.getTextBounds(text, 0, 0, &x1, &y1, &w, &h);
+  display.setCursor((SCREEN_WIDTH - w) / 2, (SCREEN_HEIGHT - h) / 2);
+  display.print(text);
+  display.display();
+  delay(1000);
+}
+
+
+// ---- Draw Z rotation indicator ----
+void drawZRotation(float zDeg) {
+  // Circle
+  display.drawCircle(64, 32, 25, SSD1306_WHITE);
+
+  // Convert degrees to radians
+  float rad = zDeg * 0.0174533;
+
+  // End of rotating line
+  int x = 64 + cos(rad) * 20;
+  int y = 32 + sin(rad) * 20;
+
+  display.drawLine(64, 32, x, y, SSD1306_WHITE);
+}
+
+
+// ---- Movement Display ----
+void showMove(const char* text) {
+  display.clearDisplay();
+  display.setTextSize(2);
+  display.setTextColor(SSD1306_WHITE);
+  display.setCursor(20, 20);
+  display.print(text);
+  display.display();
+}
+
+
+// -------------------- SETUP --------------------
+void setup() {
+  Serial.begin(115200);
+  delay(200);
+
+  // EXACT WORKING INITIALIZATION (do NOT change)
+  Wire.begin(SDA_PIN, SCL_PIN);
+  delay(200);
+
+  oledAddress = scanI2C();
+  if (oledAddress == 0) {
+    Serial.println("ERROR: No OLED found!");
+    while (1);
+  }
+
+  Serial.print("Using OLED address: 0x");
+  Serial.println(oledAddress, HEX);
+
+  if (!display.begin(SSD1306_SWITCHCAPVCC, oledAddress)) {
+    Serial.println("OLED INIT FAILED!");
+    while (1);
+  }
+
+  // ----- BOOT UP SEQUENCE -----
+  showSplash("Welcome");
+  showSplash("Vacuum");
+  showSplash("Robot");
+  showSplash("Starting");
+  showSplash("Ready!");
+
+  // ----- INITIALIZE MPU6050 -----
+  if (!mpu.begin()) {
+    Serial.println("MPU NOT FOUND!");
+    while (1);
+  }
+
+  mpu.setAccelerometerRange(MPU6050_RANGE_8_G);
+  mpu.setGyroRange(MPU6050_RANGE_500_DEG);
+  Serial.println("MPU6050 Ready");
+}
+
+
+// -------------------- LOOP --------------------
 void loop() {
 
-    // Read IMU
-    mpu.getAcceleration(&accelX, &accelY, &accelZ);
-    mpu.getRotation(&gyroX, &gyroY, &gyroZ);
+  // -------- Read IMU --------
+  sensors_event_t accel, gyro, temp;
+  mpu.getEvent(&accel, &gyro, &temp);
 
-    display.clearDisplay();
+  float zRotDeg = gyro.gyro.z * 57.2958;  // Convert rad/s to deg/s
 
-    // Show IMU values
-    display.setTextSize(1);
-    display.setCursor(0, 0);
-    display.print("AX: "); display.print(accelX);
-    display.setCursor(70, 0);
-    display.print("GYZ:");
+  // -------- Display IMU --------
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setCursor(0, 0);
+  display.println("IMU:");
+  display.print("Z rot: ");
+  display.print(zRotDeg);
+  display.println(" deg/s");
 
-    display.setCursor(0, 10);
-    display.print("AY: "); display.print(accelY);
+  // Draw rotation axis
+  drawZRotation(zRotDeg);
 
-    display.setCursor(0, 20);
-    display.print("AZ: "); display.print(accelZ);
+  display.display();
+  delay(50);
 
-    display.setCursor(70, 10);
-    display.print(gyroZ);
 
-    // Draw Z rotation indicator
-    drawZRotationIndicator(gyroZ);
+  // -------- Movement Test (examples) --------
+  // Uncomment these when you connect your motors:
+  //
+  // showMove("Forward");
+  // delay(500);
+  // showMove("Backward");
+  // delay(500);
+  // showMove("Left");
+  // delay(500);
+  // showMove("Right");
+  // delay(500);
 
-    display.display();
-
-    // Example movement logging (replace with real motor logic)
-    if (gyroZ > 200) {
-        logMovement("Right");
-    }
-    else if (gyroZ < -200) {
-        logMovement("Left");
-    }
-
-    delay(100);
 }
