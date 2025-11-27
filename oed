@@ -1,0 +1,111 @@
+#include <Arduino.h>
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+#include <MPU6050.h>
+
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
+
+MPU6050 mpu;
+
+long accelX, accelY, accelZ;
+long gyroX, gyroY, gyroZ;
+
+// --------------------------
+// Draw rotation axis (Z rotation)
+// --------------------------
+void drawZRotationIndicator(int zGyro) {
+    display.drawLine(64, 0, 64, 30, WHITE);  // vertical axis
+
+    // map Z gyro (-250 → +250 °/s) to arrow rotation
+    int angle = map(zGyro, -250, 250, -45, 45);
+    float rad = angle * 0.01745;
+
+    int x = 64 + 20 * sin(rad);
+    int y = 30 - 20 * cos(rad);
+
+    display.drawLine(64, 30, x, y, WHITE);
+    display.fillCircle(x, y, 3, WHITE);
+}
+
+// --------------------------
+// Motor command logging
+// --------------------------
+void logMovement(String msg) {
+    display.clearDisplay();
+    display.setTextSize(2);
+    display.setCursor(0, 20);
+    display.print(msg);
+    display.display();
+    delay(400);  // brief display time
+}
+
+// --------------------------
+// Setup
+// --------------------------
+void setup() {
+    Wire.begin();
+
+    display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
+    display.clearDisplay();
+    display.setTextColor(WHITE);
+    display.setTextSize(2);
+
+    // Boot messages
+    const char* bootMsgs[] = {"Welcome", "Vacuum Robot", "Starting On", "Ready..."};
+    for (int i = 0; i < 4; i++) {
+        display.clearDisplay();
+        display.setCursor(10, 25);
+        display.print(bootMsgs[i]);
+        display.display();
+        delay(1000);
+    }
+
+    // Init MPU6050
+    mpu.initialize();
+}
+
+// --------------------------
+// Loop
+// --------------------------
+void loop() {
+
+    // Read IMU
+    mpu.getAcceleration(&accelX, &accelY, &accelZ);
+    mpu.getRotation(&gyroX, &gyroY, &gyroZ);
+
+    display.clearDisplay();
+
+    // Show IMU values
+    display.setTextSize(1);
+    display.setCursor(0, 0);
+    display.print("AX: "); display.print(accelX);
+    display.setCursor(70, 0);
+    display.print("GYZ:");
+
+    display.setCursor(0, 10);
+    display.print("AY: "); display.print(accelY);
+
+    display.setCursor(0, 20);
+    display.print("AZ: "); display.print(accelZ);
+
+    display.setCursor(70, 10);
+    display.print(gyroZ);
+
+    // Draw Z rotation indicator
+    drawZRotationIndicator(gyroZ);
+
+    display.display();
+
+    // Example movement logging (replace with real motor logic)
+    if (gyroZ > 200) {
+        logMovement("Right");
+    }
+    else if (gyroZ < -200) {
+        logMovement("Left");
+    }
+
+    delay(100);
+}
