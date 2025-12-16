@@ -6,22 +6,22 @@
 // OLED Display settings
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
-#define OLED_RESET    -1
+#define OLED_RESET -1
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 // MPU6050 object
 Adafruit_MPU6050 mpu;
 
 // Encoder pins (Set to ESP32 GPIO pins as per your ESP-IDF setup)
-#define ENCODER_LEFT_A_PIN 2  // Set encoder A pin for left motor
-#define ENCODER_LEFT_B_PIN 3  // Set encoder B pin for left motor
-#define ENCODER_RIGHT_A_PIN 4 // Set encoder A pin for right motor
-#define ENCODER_RIGHT_B_PIN 5 // Set encoder B pin for right motor
+#define ENCODER_LEFT_A_PIN 6    // Set encoder A pin for left motor
+#define ENCODER_LEFT_B_PIN 7    // Set encoder B pin for left motor
+#define ENCODER_RIGHT_A_PIN 10  // Set encoder A pin for right motor
+#define ENCODER_RIGHT_B_PIN 11  // Set encoder B pin for right motor
 
 // Encoder counts and direction
 volatile int encoder_left_count = 0;
 volatile int encoder_right_count = 0;
-volatile bool encoder_left_direction = true;  // True = Forward, False = Backward
+volatile bool encoder_left_direction = true;   // True = Forward, False = Backward
 volatile bool encoder_right_direction = true;  // True = Forward, False = Backward
 
 // I2C settings from your ESP-IDF code
@@ -37,9 +37,10 @@ void setup() {
   Wire.begin(SDA_PIN, SCL_PIN);
 
   // Initialize OLED
-  if (!display.begin(SSD1306_I2C_ADDRESS, OLED_RESET)) {
+  if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
     Serial.println(F("SSD1306 allocation failed"));
-    for (;;);  // Halt execution if OLED init fails
+    for (;;)
+      ;  // Halt execution if OLED init fails
   }
   display.display();
   delay(2000);  // Wait for the OLED to initialize
@@ -47,7 +48,8 @@ void setup() {
   // Initialize MPU6050
   if (!mpu.begin()) {
     Serial.println("Failed to initialize MPU6050");
-    for (;;);  // Halt execution if MPU6050 init fails
+    for (;;)
+      ;  // Halt execution if MPU6050 init fails
   }
   Serial.println("MPU6050 Initialized");
 
@@ -72,7 +74,7 @@ void setup() {
 // Display splash messages
 void splash(const char* message) {
   display.clearDisplay();
-  display.setTextSize(2);      // Text size 2
+  display.setTextSize(2);  // Text size 2
   display.setTextColor(SSD1306_WHITE);
   display.setCursor(10, 20);
   display.print(message);
@@ -176,6 +178,7 @@ void loop() {
   display.display();
   delay(100);  // Refresh every 100ms
 }
+
 
 
 ///////ESP_IDF
